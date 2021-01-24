@@ -77,11 +77,11 @@ class ConvNet(nn.Module):
 
 model = ConvNet(num_classes).to(device)
 
-# Loss and optimizer
+
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-# Train the model
+
 total_step = len(train_loader)
 for epoch in range(num_epochs):
 	for i, (images, labels) in enumerate(train_loader):
@@ -101,8 +101,8 @@ for epoch in range(num_epochs):
 			print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
 			      .format(epoch + 1, num_epochs, i + 1, total_step, loss.item()))
 
-# Test the model
-model.eval()  # eval mode (batchnorm uses moving mean/variance instead of mini-batch mean/variance)
+
+model.eval()
 with torch.no_grad():
 	correct = 0
 	total = 0
