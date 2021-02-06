@@ -47,3 +47,4 @@ class Transformer(nn.Module):
         self.feature_map = x.detach()
         return self.classifier(x)
     
+    
