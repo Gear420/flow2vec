@@ -54,8 +54,7 @@ model_ft = torch.load(args.model)
 
 num_ftrs = model_ft.fc.in_features             # 全连接层的输入的特征数
 
-model_ft.fc = nn.Linear(num_ftrs, args.classes)           # 利用线性映射将原来的num_ftrs转换为2（蚂蚁和密封）
-                                               # 将最后一个全连接由（512， 1000）改为(512, 2)   因为原网络是在1000类的ImageNet数据集上训练的                # 设置计算采用的设备，GPU还是CPU
+model_ft.fc = nn.Linear(num_ftrs, args.classes)
 
 criterion = nn.CrossEntropyLoss()              # 交叉熵损失函数
 
@@ -80,11 +79,9 @@ iter = 0
 cur_loss = 0
 all_losses = []
 
-device = torch.device("cuda:0" if torch.cuda.is_available() and args.use_cuda else "cpu")
-print("using device:", device)
-model = model.to(device)
-# 训练模型
-timer.tick()
+def save(model):
+	torch.save(model, args.O)
+	print('Saved to', args.O)
 
 
 def evaluate(model):
@@ -107,18 +104,18 @@ best_acc = float('-inf')
 
 try:
 	for epoch in range(1, args.num_epochs + 1):
-		model.train()
+		model_ft.train()
 		for flows, categories in train_loader:
 			# 正向计算
 			flows = flows.to(device)
 			categories = categories.to(device)
-			outputs = model(flows)
+			outputs = model_ft(flows)
 			loss = criterion(outputs, categories)
 			
 			# 反向传播和优化
-			optimizer.zero_grad()
+			optimizer_ft.zero_grad()
 			loss.backward()
-			optimizer.step()
+			optimizer_ft.step()
 			loss = loss.item()
 			
 			cur_loss += loss
