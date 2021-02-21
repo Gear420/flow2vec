@@ -9,7 +9,7 @@ from data_utils import *
 
 
 class TfNet(nn.Module):
-	def __init__(self, out_size, num_classes, num_pkt_features, embedding_dim=128, hidden_dim=32,
+	def __init__(self, out_size, num_classes, num_pkt_features, embedding_dim=4, hidden_dim=32,
 	             num_layers=1,
 	             ):
 		super(TfNet, self).__init__()
@@ -25,9 +25,9 @@ class TfNet(nn.Module):
 		self.num_classes = num_classes
 		
 		# 构建模型。
-		self.embedding = self._embedding()  # embedding数目为layer数
-		self.encoder_layer = self._encoder()
-		self.decoder_layer = self._decoder()
+		self.embedding = self._embedding()
+		self.encoder = self._encoder()
+		self.decoder = self._decoder()
 		self.cls_layer = self._classify()
 		self.device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
 	
@@ -42,17 +42,18 @@ class TfNet(nn.Module):
 		encoder = nn.TransformerEncoder(encoder_layer, num_layers)
 		return encoder
 	
-	def _decoder_input(self, seq_len, encoder_feats):
-		encoder_feats = encoder_feats.unsqueeze(1)
-		decoder_input = encoder_feats.repeat(1, seq_len, 1)
-		return decoder_input
+	# def _decoder_input(self, seq_len, encoder_feats):
+	# 	# encoder_feats = encoder_feats.unsqueeze(1)
+	# 	# decoder_input = encoder_feats.repeat(1, seq_len, 1)
+	#
+	#
+	# 	return decoder_input
 	
 	def _decoder(self):
 		num_heads = 1
 		num_layers = 2
 		decoder_layer = nn.TransformerDecoderLayer(self.embedding_dim, num_heads)
-		# stack `num_layers` layers to form an encoder
-		decoder = nn.TransformerEncoder(decoder_layer, num_layers)
+		decoder = nn.TransformerDecoder(decoder_layer, num_layers)
 		return decoder
 	
 	def fusion(self, encoder_feats, decoder_feats):
@@ -63,23 +64,50 @@ class TfNet(nn.Module):
 	
 	def _classify(self):
 		classifier = nn.Sequential(
-			nn.Linear(self.hidden_dim * self.num_layers * self.num_pkt_features * 2 * 4, self.num_classes),
-			nn.SELU(),
+			nn.Linear(16, self.num_classes),
+			nn.ReLU(),
 			nn.Linear(self.num_classes, self.num_classes),
-			nn.SELU()
+			nn.ReLU()
 		)
 		return classifier
 	
 	def forward(self, x):
 		self.seq_len = x.size(1)
-		x = torch.squeeze(x)  # 输出两个结果，一个是AutoDecoder结构的重建结果，与输入进行loss计算，一个是分类后的结果与label进行loss计算
-		x2 = self.embedding(x)
-		_, encoder_feats = self.encoder_layer(x2)
-		decoder_inputs = self._decoder_input(self.seq_len, encoder_feats)
-		re, decoder_feats = self.decoder_layer(decoder_inputs)
-		cls_feats = self.fusion(encoder_feats, decoder_feats)
+		print(x.size(1))
+		x = torch.squeeze(x)
+		print(x.shape)
+		print(x)
+		# 输出两个结果，一个是AutoDecoder结构的重建结果，与输入进行loss计算，一个是分类后的结果与label进行loss计算
+		x2 = self.embedding(x)#做一部embedding。
+		print(x2.shape)
+		print(x2)
+		
+		encoder_feats = self.encoder(x2)
+		print(encoder_feats.shape)
+		print(encoder_feats)
+		
+		
+		#decoder_inputs = self._decoder_input(self.seq_len, encoder_feats)
+		
+		#print(decoder_inputs.shape)
+		
+		out = self.decoder(x2,encoder_feats) #与x2相近。
+		
+		
+		print(out.shape)
+		print(out)
+		
+		
+		cls_feats = self.fusion(encoder_feats, out)
+		print("fusion:")
+		print(cls_feats.shape)
+		
+		cls_feats = torch.mean(cls_feats,1)
+		
+		
 		y = self.cls_layer(cls_feats)
-		return re, y, x
+		print(y.shape)
+		# return re, y, x
 
 
 class FsNetLoss(nn.Module):
@@ -93,7 +121,6 @@ class FsNetLoss(nn.Module):
 	def forward(self, re, cls, label, inputs):
 		cls_loss = self.CLS(cls, label)
 		inputs = torch.squeeze(inputs)
-		# print(inputs.size())
 		re = re.transpose(1, 2)
 		re_loss = self.RE(re, inputs)
 		loss = cls_loss + self.alpah * re_loss
@@ -103,11 +130,9 @@ class FsNetLoss(nn.Module):
 if __name__ == "__main__":
     #模型测试
     test_input = torch.tensor([[1,2,3,4,5],[3,4,6,7,2]])
-    test_out_put = torch.tensor(1)
-    cls = TfNet(10,10,10,2,4)
-    re,y = cls(test_input)
-    print(re)
-    print(y)
+    test_out_put = torch.tensor([1,2])
+    cls = TfNet(10,2,1)
+    y = cls(test_input)
 
 
 # if __name__ == "__main__":

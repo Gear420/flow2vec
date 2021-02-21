@@ -1,70 +1,85 @@
-
-
-# !/usr/bin/env python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @Time    : 2021/2/2 12:46 AM
+# @Time    : 2021/2/21 8:52 PM
 # @Author  : Gear
 
+# ! /usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-from __future__ import print_function, division
 
+import myutils
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.optim import lr_scheduler
-import numpy as np
-import torchvision
-from torchvision import datasets, models, transforms
-import matplotlib.pyplot as plt
-import time
+import torch.nn
+import torch.optim
+from torch.utils.data import DataLoader, random_split
+
+from dataset import FlowDataset
+from model import Transformer
+
+import argparse
 import os
 
-import argparse
-
+import myutils
 import torch
 import torch.nn
+import torch.optim
 from torch.utils.data import DataLoader, random_split
 
 from dataset import FlowDataset
 from model import Transformer
 
-import argparse
-
-import torch
-import torch.nn
-from torch.utils.data import DataLoader, random_split
-
-from dataset import FlowDataset
-from model import Transformer
+timer = myutils.Timer()
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('dataset')
-argparser.add_argument('--model')
+argparser.add_argument('--num_pkt_features',
+                       type=int,
+                       default=1,
+                       help="number of features per packet (default 2)")
+argparser.add_argument('--num_epochs',
+                       type=int,
+                       default=100,
+                       help="epochs (default 10)")
+argparser.add_argument('--learning_rate',
+                       type=float,
+                       default=0.0001,
+                       help="learning rate (default 0.0001)")
 argparser.add_argument('--batch_size',
                        type=int,
                        default=64,
                        help="batch size (default 10)")
-argparser.add_argument('--classes',
-                       type=int,
-                       default=64,
-                       help="transfer classes")
+argparser.add_argument("--use_cuda", action='store_true', help='run prepare_data or not')
+argparser.add_argument('-O', default='data/model.pt', help='path ot save model')
+
 args = argparser.parse_args()
 
+outdir = os.path.dirname(args.O)
+if not os.path.exists(outdir): os.mkdir(outdir)
+
 dataset = FlowDataset(args.num_pkt_features, args.dataset)
-model_ft = torch.load(args.model)
+model = Transformer(dataset.sizes, dataset.num_classes, args.use_cuda)
 
-num_ftrs = model_ft.fc.in_features  # 全连接层的输入的特征数
 
-model_ft.fc = nn.Linear(num_ftrs, args.classes)
+def save():
+	torch.save(model, args.O)
+	print('Saved to', args.O)
 
-criterion = nn.CrossEntropyLoss()  # 交叉熵损失函数
 
-# Observe that all parameters are being optimized
-optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)  # 优化器，对加载的模型中所有参数都进行优化
+def weigth_init(m):
+	if isinstance(m, torch.nn.BatchNorm2d):
+		m.weight.data.fill_(1)
+		m.bias.data.zero_()
+	elif isinstance(m, torch.nn.Linear):
+		m.weight.data.normal_(0, 0.01)
+		m.bias.data.zero_()
 
-# Decay LR by a factor of 0.1 every 7 epochs
-exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
+model.apply(weigth_init)
+# 损失和优化器
+criterion = torch.nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+
+# Parameters
 params = {'batch_size': args.batch_size, 'shuffle': True}
 
 # 分割数据80:20
@@ -80,10 +95,11 @@ iter = 0
 cur_loss = 0
 all_losses = []
 
-
-def save(model):
-	torch.save(model, args.O)
-	print('Saved to', args.O)
+device = torch.device("cuda:0" if torch.cuda.is_available() and args.use_cuda else "cpu")
+print("using device:", device)
+model = model.to(device)
+# 训练模型
+timer.tick()
 
 
 def evaluate(model):
@@ -106,18 +122,18 @@ best_acc = float('-inf')
 
 try:
 	for epoch in range(1, args.num_epochs + 1):
-		model_ft.train()
+		model.train()
 		for flows, categories in train_loader:
 			# 正向计算
 			flows = flows.to(device)
 			categories = categories.to(device)
-			outputs = model_ft(flows)
+			outputs = model(flows)
 			loss = criterion(outputs, categories)
 			
 			# 反向传播和优化
-			optimizer_ft.zero_grad()
+			optimizer.zero_grad()
 			loss.backward()
-			optimizer_ft.step()
+			optimizer.step()
 			loss = loss.item()
 			
 			cur_loss += loss
@@ -144,4 +160,4 @@ try:
 	plt.show()
 	plt.savefig("result_loss.jpg")
 except ImportError:
-	passa
+	pass
