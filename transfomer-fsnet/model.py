@@ -64,7 +64,7 @@ class TfNet(nn.Module):
 	
 	def _classify(self):
 		classifier = nn.Sequential(
-			nn.Linear(16, self.num_classes),
+			nn.Linear(self.embedding_dim * 4, self.num_classes),
 			nn.ReLU(),
 			nn.Linear(self.num_classes, self.num_classes),
 			nn.ReLU()
